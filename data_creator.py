@@ -6,71 +6,63 @@ import code
 def create_square():
     return np.array([[-np.sqrt(2) / 2, np.sqrt(2) / 2], [np.sqrt(2) / 2, np.sqrt(2) / 2],
                        [np.sqrt(2) / 2, -np.sqrt(2) / 2], [-np.sqrt(2) / 2, -np.sqrt(2) / 2]])
-def create_triangle():
-    return np.array([[-np.sqrt(3) / 2, -0.5], [0, 1], [np.sqrt(3) / 2, -0.5]])
+def create_triangle(): return np.array([[-np.sqrt(3) / 2, -0.5], [0, 1], [np.sqrt(3) / 2, -0.5]])
     # return np.array([[1, 2], [3, 1], [3, 3]])
-def create_trapezoid():
-    return np.array([[-0.5, 1], [0.5, 1], [1, -1], [-1, -1]])
-def create_pentagon():
-    return np.array([[-0.5, 0], [0, -1], [0.5, -1], [0.5, 0.5], [0, 1]])
-def create_L():
-    return np.array([[-1, -1], [0, -1], [1, -1], [1, 0], [1, 1]])
+def create_trapezoid(): return np.array([[-0.5, 1], [0.5, 1], [1, -1], [-1, -1]])
+def create_pentagon(): return np.array([[-0.5, 0], [0, -1], [0.5, -1], [0.5, 0.5], [0, 1]])
+def create_L_shape(): return np.array([[-1, -1], [0, -1], [1, -1], [1, 0], [1, 1]])
 
-def create_object(obj):
-    object_creator = {'square':create_square(),'triangle':create_triangle(),'trapezoid':create_trapezoid(),
-               'pentagon':create_pentagon(),'L_shape':create_L()}
-    if obj in object_creator.keys():
-        return object_creator[obj]
+# Helper function to create templates (arrays of 2D points) for each specified object in obj
+def create_template(obj):
+    template_list = ['square', 'triangle', 'trapezoid', 'pentagon', 'L_shape']
+    template_functions = {elem: 'create_' + elem for elem in template_list}
+    if obj in template_list:
+        return eval(template_functions[obj])()
     else:
         raise ValueError('Unimplemented object "' + obj + '"')
 
 # This function creates the transformation matrix for a given 2D-point {list of 2x4 numpy arrays, number of vertices}
-def transformation_matrix(point):
-    return [np.array([[1,0,x,y],[0,1,y,-x]]) for x,y in point]
+def expand_template(point): return [np.array([[1, 0, x, y], [0, 1, y, -x]]) for x, y in point]
 
-#Generate the object templates and their corresponding arrays of transformation matrices
-def template_generation(objects):
-    templates = [create_object(obj) for obj in objects]
-    F = [transformation_matrix(template) for template in templates]
-    return templates, F
+# This function constraints the data to be in the [-1,1] 2D square
+def constrain_image(x): return (x - np.min(x)) / (np.max(x) - np.min(x)) * 2 - 1
+# Add random noise to the points is specified
+def noisy_observations(x, std_noise): return x + std_noise * np.random.randn(x.shape[0], 2)
 
-def constrain_image(x):
-    return (x - np.min(x)) / (np.max(x) - np.min(x)) * 2 - 1
-
+#This function generates an image given the expanded templates with a random affine transformation
 def image_generation(F, visible_objects, is_constrained=True, std_noise=0):
     # Create transformed data points with random transformations
     y = np.random.randn(len(visible_objects), 4)
-    x_m = np.concatenate([F_k @ y_k for F_k, y_k, v_k in zip(F,y,visible_objects) if v_k])
+    x = np.concatenate([F_k @ y_k for F_k, y_k, v_k in zip(F, y, visible_objects) if v_k])
+    # Add Gaussian noise and constraint image too [-1,1] if necessary
+    x = noisy_observations(x, std_noise) if std_noise else x
+    x = constrain_image(x) if is_constrained else x
+    #Return both the data and the applied transformation y
+    return x, y
 
-    # Add Gaussian noise
-    x_m += std_noise * np.random.randn(x_m.shape[0], 2)
-    # Enforce all the points to be in [-1,1]
-    x_m = constrain_image(x_m) if is_constrained else x_m
-
-    return x_m, y
+# Compute F^TF for simple computations
+def external_product_FTF(F): return [np.transpose(F_k, [0, 2, 1]) @ F_k for F_k in F]
+# Compute F^Tx for simple computations
+def external_product_FTx(x, F): return [[x_m @ F_k for x_m in x] for F_k in F]
 
 #Main function that creates the image and all its properties
 def create_image(objects, visible_objects, is_constrained=True, std_noise=0):
 
-    # Create base objects
-    templates, F = template_generation(objects)
-    # Create image
+    #Create templates from object description
+    templates = [create_template(obj) for obj in objects]
+    #Create template characteristic matrices
+    F = [expand_template(template) for template in templates]
+    #Generate an image instance
     x, y = image_generation(F, visible_objects, is_constrained, std_noise)
-
-    # code.interact(local=dict(globals(), **locals()))
-
-    # Get main properties
+    #Get properties of the image
     K = len(objects)
-    N_k = np.array([len(obj) for obj in templates])
+    N_k = np.array([len(template) for template in templates])
     N = sum(N_k)
     M = np.shape(x)[0]
-
-    # Create F^TF and F^Tx_m matrices (simplifies computations later)
-    FF = [np.transpose(F_k, [0, 2, 1]) @ F_k for F_k in F]
-    F_xm = [[x_m @ F_k for x_m in x] for F_k in F]
-
-    # code.interact(local=dict(globals(), **locals()))
-
+    #Compute auxiliary external product matrices (for ease of computations)
+    FF = external_product_FTF(F)
+    F_xm = external_product_FTx(x, F)
+    #Return the data object
     return dict({'X_m': x, 'M': M, 'F': F, 'FF': FF, 'F_xm': F_xm,
                   'K': K, 'N_k': N_k, 'N': N, 'y': y, 'objects': objects,
                  'visible_objects': visible_objects,'loaded':False})

@@ -8,7 +8,8 @@ def get_bases(data_model):
     # Check which objects are available in the experiment
     unique_objects = np.unique(data_model['objects'])
     # Get templates of each unique object
-    templates, F = data_creator.template_generation(unique_objects)
+    templates = [data_creator.create_template(obj) for obj in unique_objects]
+    F = [data_creator.expand_template(template) for template in templates]
     # With 2 points we can define a full objects, F becomes a square 4x4 matrix
     F_partial = [np.concatenate(F_t[:2],0) for F_t in F]
     bases = [np.linalg.inv(F_p) for F_p in F_partial]
@@ -50,13 +51,13 @@ def square_diffs_2D(A,B):
 
 #Get all sublist of points that form an object, including permutations of the same sublist
 #We don't use sets since the order of the elements matter to form the object
-def get_possible_objects(data_model, x):
+def get_possible_objects(data_model):
 
     #Get constituting bases and transformation matrices for each object
     bases, F = get_bases(data_model)
 
     min_sq = 1e-0
-    n_points = len(x)
+    n_points = data_model['M']
     list_points = []
     list_x = []
     cost_total = []
@@ -66,11 +67,11 @@ def get_possible_objects(data_model, x):
             if jj == ii:
                 continue
             #Compute candidate objects for each pair of points
-            x_est = get_candidate_objects(x, bases, F, ii, jj)
+            x_est = get_candidate_objects(data_model['X_m'], bases, F, ii, jj)
             # Check each object
             for obj in x_est:
                 # Compute square differences between the estimated points and the data points
-                sq_diffs = square_diffs_2D(x, obj[2:])
+                sq_diffs = square_diffs_2D(data_model['X_m'], obj[2:])
                 #Check if there are points matching the estimated shape
                 groups = get_possible_permutations(sq_diffs, min_sq)
                 #Remove incorrect groups and get the data
@@ -85,7 +86,7 @@ def get_possible_objects(data_model, x):
                         permutation = list((ii,jj) + group)
                         cost_total += [np.mean(sq_diffs[group,cols])]
                         list_points += [permutation]
-                        list_x += [x[permutation]]
+                        list_x += [data_model['X_m'][permutation]]
 
     return list_points, list_x, cost_total
 

@@ -10,42 +10,38 @@ import pickle
 def main(main_folder):
 
     verbose = True
+    is_constrained = True
 
-    #Create base objects (square, triangle, trapezoid, L_shape, pentagon), {list of str}
+    # Define objects for the images (square, triangle, trapezoid, L_shape, pentagon), {list of str}
     objects = ['square', 'triangle', 'square']
-    objects = 2*['square'] + 2*['triangle'] + 3*['pentagon']
 
-    #Determine which objects are present in the image, avoiding blank images, {list of {0,1} elements}
+    # Determine which objects are present in the image, avoiding blank images, {list of {0,1} elements}
     visible_objects = np.random.randint(0, 2, len(objects))
     while not sum(visible_objects):
         visible_objects = np.random.randint(0, 2, len(objects))
-    # visible_objects = np.array([1,1,1])
 
-    # Create image and save all data parameters
-    data_model = data_creator.create_image(objects, visible_objects, is_constrained=False, std_noise=0.1)
+    # Generate image and return all data parameters
+    data_model = data_creator.create_image(objects, visible_objects, is_constrained, std_noise=0.2)
     if verbose:
         print('Figure with ' + str(sum(visible_objects)) + ' objects')
-
-    #Randomize image points (Optional)
-    x = data_model['X_m']
-    # index = np.random.permutation(len(x))
-    # x = x[index]
 
     ## Here starts the model
 
     #Run baseline
-    list_points, list_x, list_costs = ransac_model.get_possible_objects(data_model, x)
+    list_points, list_x, list_costs = ransac_model.get_possible_objects(data_model)
 
-    X_obj_est = ransac_model.find_possible_solutions(x, list_points, list_costs)
+    X_obj_est = ransac_model.find_possible_solutions(data_model['X_m'], list_points, list_costs)
 
     # # Check unique points in assignments
     # X_obj_est = ransac_model.find_unique_pattern(x, list_points, list_costs)
 
     # code.interact(local=dict(globals(), **locals()))
 
+    ## Here starts the plotting of the results
+
     # Plot the evolution of the VBEM
     figures_dir = main_folder + '/baseline/'
-    utils.save_figures_baseline(figures_dir, data_model, X_obj_est, is_constrained=False)
+    utils.save_figures_baseline(figures_dir, data_model, X_obj_est, is_constrained)
 
     # Create a directory if it doesn't exist
     if not os.path.exists(figures_dir):
