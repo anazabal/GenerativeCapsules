@@ -2,6 +2,9 @@ import code
 import numpy as np
 import utils
 import data_creator
+import ransac_model
+import os
+import pickle
 import csv
 
 #TODO - close
@@ -44,6 +47,7 @@ def r_mnk_initialization(data_model, choice):
 def main(main_folder):
 
     verbose = True
+    video = False
 
     #Create base objects and their presence or not in the image
     objects = ['square', 'triangle', 'square']
@@ -55,7 +59,32 @@ def main(main_folder):
         visible_objects = np.random.randint(0, 2, len(objects))
 
     # Create image and save all data parameters
-    data_model = data_creator.create_image(objects, visible_objects, is_constrained=True)
+    data_parameters = {'is_constrained': True, 'noise_type': 'template', 'std_noise': 0}
+    data_model = data_creator.create_image(objects, visible_objects, data_parameters)
+
+    ####################
+    # Run baseline and save results
+    X_obj_est = ransac_model.run(data_model)
+
+    # code.interact(local=dict(globals(), **locals()))
+
+    ## Here starts the plotting of the results
+
+    # Plot the evolution of the VBEM
+    figures_dir = main_folder + '/baseline/'
+    utils.save_figures_baseline(figures_dir, data_model, X_obj_est, data_parameters['is_constrained'])
+
+    # Create a directory if it doesn't exist
+    if not os.path.exists(figures_dir):
+        os.makedirs(figures_dir)
+
+    # Save data model
+    data_file = figures_dir + 'data_model.pkl'
+    with open(data_file, 'wb') as f:
+        pickle.dump(data_model, f, pickle.HIGHEST_PROTOCOL)
+    ######################
+
+
 
     # # Repeat experiment with different initializations of lambda
     # models = 2*['basic_model'] + 2*['basic_model_sinkhorn'] + \
@@ -63,9 +92,9 @@ def main(main_folder):
     # lambda_0 = 3*[1,50] + [1,50] + [1,50]
 
     models = ['sinkhorn_model_annealing_stop']
-    lambda_0 = [1000]
+    lambda_0 = [100]
 
-    inits = 5
+    inits = 3
     title_inits = ['r_mnk close to truth'] + 20 * ['r_mkn random']
     # r_mnk_method = ['close'] + 19*['random']
     r_mnk_method = ['close'] + 20 * ['random']
@@ -159,8 +188,10 @@ def main(main_folder):
             utils.save_figures(figures_dir, final_results, final_params, data_model)
             #All restarts
             # utils.video_creation(figures_dir, np.array(full_results), full_params, data_model, title_inits[ii], 1000)
+
             #Only the best
-            utils.video_creation(figures_dir, np.array(final_results), final_params, data_model, title_inits[ii], 100)
+            if video:
+                utils.video_creation(figures_dir, np.array(final_results), final_params, data_model, title_inits[ii], 100)
 
             # code.interact(local=dict(globals(), **locals()))
 

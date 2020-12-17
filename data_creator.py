@@ -32,12 +32,12 @@ def constrain_image(x): return (x - np.min(x)) / (np.max(x) - np.min(x)) * 2 - 1
 def noisy_observations(x, std_noise): return x + std_noise * np.random.randn(x.shape[0], 2)
 
 #This function generates an image given the expanded templates with a random affine transformation
-def image_generation(templates, visible_objects, is_constrained=True, std_noise=0, noise_type='image'):
+def image_generation(templates, visible_objects, parameters):
     # Create template characteristic matrices, noised if necessary
     F_true = [expand_template(template) for template in templates]
-    if noise_type == 'template':
+    if parameters['noise_type'] == 'template':
         # templates = [template + np.random.randn(template.shape[0],2) for template in templates]
-        templates = [noisy_observations(template, std_noise) for template in templates]
+        templates = [noisy_observations(template, parameters['std_noise']) for template in templates]
         F = [expand_template(template) for template in templates]
     else:
         F = F_true
@@ -45,8 +45,8 @@ def image_generation(templates, visible_objects, is_constrained=True, std_noise=
     y = np.random.randn(len(visible_objects), 4)
     x = np.concatenate([F_k @ y_k for F_k, y_k, v_k in zip(F, y, visible_objects) if v_k])
     # Add Gaussian noise and constraint image too [-1,1] if necessary
-    x = noisy_observations(x, std_noise) if noise_type == 'image' else x
-    x = constrain_image(x) if is_constrained else x
+    x = noisy_observations(x, parameters['std_noise']) if parameters['noise_type'] == 'image' else x
+    x = constrain_image(x) if parameters['is_constrained'] else x
     #Return both the data and the applied transformation y
     return x, y, F_true
 
@@ -56,12 +56,12 @@ def external_product_FTF(F): return [np.transpose(F_k, [0, 2, 1]) @ F_k for F_k 
 def external_product_FTx(x, F): return [[x_m @ F_k for x_m in x] for F_k in F]
 
 #Main function that creates the image and all its properties
-def create_image(objects, visible_objects, is_constrained=True, std_noise=0):
+def create_image(objects, visible_objects, parameters):
 
     #Create templates from object description
     templates = [create_template(obj) for obj in objects]
     #Generate an image instance
-    x, y, F = image_generation(templates, visible_objects, is_constrained, std_noise, noise_type='template')
+    x, y, F = image_generation(templates, visible_objects, parameters)
     #Get properties of the image
     K = len(objects)
     N_k = np.array([len(template) for template in templates])

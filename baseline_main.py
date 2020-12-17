@@ -13,8 +13,8 @@ def main(main_folder):
     is_constrained = True
 
     # Define objects for the images (square, triangle, trapezoid, L_shape, pentagon), {list of str}
-    # objects = 2*['square', 'triangle', 'square']
-    objects = 2*['plane']
+    objects = ['square', 'triangle', 'square']
+    # objects = ['plane'] + 2*['square']
 
     # Determine which objects are present in the image, avoiding blank images, {list of {0,1} elements}
     visible_objects = np.random.randint(0, 2, len(objects))
@@ -22,7 +22,8 @@ def main(main_folder):
         visible_objects = np.random.randint(0, 2, len(objects))
 
     # Generate image and return all data parameters
-    data_model = data_creator.create_image(objects, visible_objects, is_constrained, std_noise=0.1)
+    parameters = {'is_constrained': True, 'noise_type': 'template', 'std_noise': 0.1}
+    data_model = data_creator.create_image(objects, visible_objects, parameters)
     if verbose:
         print('Figure with ' + str(sum(visible_objects)) + ' objects')
 
@@ -37,7 +38,7 @@ def main(main_folder):
 
     # Plot the evolution of the VBEM
     figures_dir = main_folder + '/baseline/'
-    utils.save_figures_baseline(figures_dir, data_model, X_obj_est, is_constrained)
+    utils.save_figures_baseline(figures_dir, data_model, X_obj_est, parameters['is_constrained'])
 
     # Create a directory if it doesn't exist
     if not os.path.exists(figures_dir):

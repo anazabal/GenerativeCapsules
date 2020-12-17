@@ -35,8 +35,7 @@ def get_possible_permutations(sq_diffs, min_sq):
     #Group all correct combinations of points
     cols = np.shape(matching_elements)[1]
     groups = [ind_rows[ind_cols==cc] for cc in range(cols)]
-    # code.interact(local=dict(globals(), **locals()))
-    return list(product(*groups))
+    return list(product(*groups)) #TODO: this can be inefficient if groups is large
 
 def square_diffs_2D(A, B):
     rowsA, colsA = np.shape(A)
