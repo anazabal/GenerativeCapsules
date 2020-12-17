@@ -1,6 +1,7 @@
 import numpy as np
 import pickle
 import code
+# code.interact(local=dict(globals(), **locals()))
 
 #Templates for different objects
 def create_square():
@@ -11,10 +12,12 @@ def create_triangle(): return np.array([[-np.sqrt(3) / 2, -0.5], [0, 1], [np.sqr
 def create_trapezoid(): return np.array([[-0.5, 1], [0.5, 1], [1, -1], [-1, -1]])
 def create_pentagon(): return np.array([[-0.5, 0], [0, -1], [0.5, -1], [0.5, 0.5], [0, 1]])
 def create_L_shape(): return np.array([[-1, -1], [0, -1], [1, -1], [1, 0], [1, 1]])
+def create_plane(): return np.array([[-2, -2], [-1, 0], [-1, 2], [-4, 2], [-1, 4], [-1, 6], [0, 8],
+                                     [1, 6], [1, 4], [4, 2], [1, 2], [1, 0], [2, -2]])
 
 # Helper function to create templates (arrays of 2D points) for each specified object in obj
 def create_template(obj):
-    template_list = ['square', 'triangle', 'trapezoid', 'pentagon', 'L_shape']
+    template_list = ['square', 'triangle', 'trapezoid', 'pentagon', 'L_shape', 'plane']
     template_functions = {elem: 'create_' + elem for elem in template_list}
     if obj in template_list:
         return eval(template_functions[obj])()
@@ -23,22 +26,29 @@ def create_template(obj):
 
 # This function creates the transformation matrix for a given 2D-point {list of 2x4 numpy arrays, number of vertices}
 def expand_template(point): return [np.array([[1, 0, x, y], [0, 1, y, -x]]) for x, y in point]
-
 # This function constraints the data to be in the [-1,1] 2D square
 def constrain_image(x): return (x - np.min(x)) / (np.max(x) - np.min(x)) * 2 - 1
 # Add random noise to the points is specified
 def noisy_observations(x, std_noise): return x + std_noise * np.random.randn(x.shape[0], 2)
 
 #This function generates an image given the expanded templates with a random affine transformation
-def image_generation(F, visible_objects, is_constrained=True, std_noise=0):
+def image_generation(templates, visible_objects, is_constrained=True, std_noise=0, noise_type='image'):
+    # Create template characteristic matrices, noised if necessary
+    F_true = [expand_template(template) for template in templates]
+    if noise_type == 'template':
+        # templates = [template + np.random.randn(template.shape[0],2) for template in templates]
+        templates = [noisy_observations(template, std_noise) for template in templates]
+        F = [expand_template(template) for template in templates]
+    else:
+        F = F_true
     # Create transformed data points with random transformations
     y = np.random.randn(len(visible_objects), 4)
     x = np.concatenate([F_k @ y_k for F_k, y_k, v_k in zip(F, y, visible_objects) if v_k])
     # Add Gaussian noise and constraint image too [-1,1] if necessary
-    x = noisy_observations(x, std_noise) if std_noise else x
+    x = noisy_observations(x, std_noise) if noise_type == 'image' else x
     x = constrain_image(x) if is_constrained else x
     #Return both the data and the applied transformation y
-    return x, y
+    return x, y, F_true
 
 # Compute F^TF for simple computations
 def external_product_FTF(F): return [np.transpose(F_k, [0, 2, 1]) @ F_k for F_k in F]
@@ -50,10 +60,8 @@ def create_image(objects, visible_objects, is_constrained=True, std_noise=0):
 
     #Create templates from object description
     templates = [create_template(obj) for obj in objects]
-    #Create template characteristic matrices
-    F = [expand_template(template) for template in templates]
     #Generate an image instance
-    x, y = image_generation(F, visible_objects, is_constrained, std_noise)
+    x, y, F = image_generation(templates, visible_objects, is_constrained, std_noise, noise_type='template')
     #Get properties of the image
     K = len(objects)
     N_k = np.array([len(template) for template in templates])
@@ -66,13 +74,6 @@ def create_image(objects, visible_objects, is_constrained=True, std_noise=0):
     return dict({'X_m': x, 'M': M, 'F': F, 'FF': FF, 'F_xm': F_xm,
                   'K': K, 'N_k': N_k, 'N': N, 'y': y, 'objects': objects,
                  'visible_objects': visible_objects,'loaded':False})
-
-
-
-
-
-
-
 
 
 def load_image(objects, image_num):
@@ -98,7 +99,6 @@ def load_image(objects, image_num):
     index_k = np.concatenate([np.zeros(1),np.cumsum(N_k)])
     index_k = [int(x) for x in index_k]
     visible_objects = np.array([])
-    # code.interact(local=dict(globals(), **locals()))
     for kk in range(K):
         if gt_presence[index_k[kk]:index_k[kk+1]].all():
             visible_objects = np.concatenate([visible_objects,np.ones(1)])
