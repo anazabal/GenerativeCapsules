@@ -108,12 +108,11 @@ def main(main_folder):
             r_mnk[ii].append(r_mnk_initialization(data_model, r_mnk_method[ii]))
 
     # code.interact(local=dict(globals(), **locals()))
-
+    # Compute GCM-perm for the same image with a different initialization of r_mnk
+    sims = 500
     for ii in range(inits):
-
         #Compare different models under same initialization
         for mm, model in enumerate(models):
-
             # Import variational inference model to use
             VI_model = __import__(model)
 
@@ -125,7 +124,7 @@ def main(main_folder):
             for rr in range(model_restarts):
 
                 # Model hyperparameters
-                hyper_params = VI_model.hyperparams_initialization(data_model, lambda_0[mm])
+                hyper_params = VI_model.hyperparams_initialization(data_model, lambda_0=lambda_0[mm])
 
                 #Save all variables in a dict of lists
                 params = VI_model.params_initialization(r_mnk[ii][rr], hyper_params)
@@ -133,7 +132,6 @@ def main(main_folder):
                     full_params = dict.fromkeys(params, [])
 
                 # VBEM
-                sims = 500
                 new_ELBO = -np.inf
                 ELBO_epoch = []
                 results = []
@@ -150,9 +148,9 @@ def main(main_folder):
                     # Save results
                     results.append([ELBO] + ELBO_terms + [score])
 
-                    if verbose:
-                        print("Init {} - Iter {} - ELBO: {:4f}, log_x: {:4f}, KL_Y: {:4f}, KL_Z: {:4f}, KL_pi: {:4f}, Score: {:4f}"
-                              .format(ii,ss,ELBO,ELBO_terms[0],-ELBO_terms[1],-ELBO_terms[2],-ELBO_terms[3],score))
+                    if verbose and not ss % 50:
+                        print("Init {} - Iter {} - ELBO: {:4f}, log_x: {:4f}, KL_Y: {:4f}, KL_Z: {:4f}, Score: {:4f}"
+                              .format(ii,ss,ELBO,ELBO_terms[0],-ELBO_terms[1],-ELBO_terms[2],score))
 
                     #stopping criteria
                     if VI_model.stop(ELBO, new_ELBO, hyper_params, params, data_model):
@@ -187,7 +185,7 @@ def main(main_folder):
             #Plot the evolution of the VBEM
             utils.save_figures(figures_dir, final_results, final_params, data_model)
             #All restarts
-            # utils.video_creation(figures_dir, np.array(full_results), full_params, data_model, title_inits[ii], 1000)
+            utils.video_creation(figures_dir, np.array(full_results), full_params, data_model, title_inits[ii], 1000)
 
             #Only the best
             if video:

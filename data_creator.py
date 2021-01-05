@@ -116,7 +116,7 @@ def load_image(objects, image_num):
     for kk in range(K):
         if visible_objects[kk]:
             X.append(gt_points[index_k[kk]:index_k[kk+1]])
-    # code.interact(local=dict(globals(), **locals()))
+
     y = np.zeros([np.sum(visible_objects),4]) #We don't have the true transformation
     X_m = np.concatenate(X)
 
