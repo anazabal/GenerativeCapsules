@@ -7,8 +7,8 @@ import code
 def create_square():
     return np.array([[-np.sqrt(2) / 2, np.sqrt(2) / 2], [np.sqrt(2) / 2, np.sqrt(2) / 2],
                        [np.sqrt(2) / 2, -np.sqrt(2) / 2], [-np.sqrt(2) / 2, -np.sqrt(2) / 2]])
-def create_triangle(): return np.array([[-np.sqrt(3) / 2, -0.5], [0, 1], [np.sqrt(3) / 2, -0.5]])
-    # return np.array([[1, 2], [3, 1], [3, 3]])
+def create_triangle(): #return np.array([[-np.sqrt(3) / 2, -0.5], [0, 1], [np.sqrt(3) / 2, -0.5]])
+    return np.array([[1, 2], [3, 1], [3, 3]])
 def create_trapezoid(): return np.array([[-0.5, 1], [0.5, 1], [1, -1], [-1, -1]])
 def create_pentagon(): return np.array([[-0.5, 0], [0, -1], [0.5, -1], [0.5, 0.5], [0, 1]])
 def create_L_shape(): return np.array([[-1, -1], [0, -1], [1, -1], [1, 0], [1, 1]])
@@ -30,6 +30,12 @@ def expand_template(point): return [np.array([[1, 0, x, y], [0, 1, y, -x]]) for 
 def constrain_image(x): return (x - np.min(x)) / (np.max(x) - np.min(x)) * 2 - 1
 # Add random noise to the points is specified
 def noisy_observations(x, std_noise): return x + std_noise * np.random.randn(x.shape[0], 2)
+# Transform templates such as they are cenetered and has a norm N_k
+def transform_template(obj):
+    N_k = np.shape(obj)[0]
+    obj = obj - np.mean(obj,0)
+    obj = obj*np.sqrt(N_k/np.sum(obj**2))
+    return obj
 
 #This function generates an image given the expanded templates with a random affine transformation
 def image_generation(templates, visible_objects, parameters):
@@ -60,6 +66,8 @@ def create_image(objects, visible_objects, parameters):
 
     #Create templates from object description
     templates = [create_template(obj) for obj in objects]
+    #Center and make the templates norm 1
+    templates = [transform_template(obj) for obj in templates]
     #Generate an image instance
     x, y, F = image_generation(templates, visible_objects, parameters)
     #Get properties of the image
@@ -145,7 +153,6 @@ def figure_data(data_model):
 
     X_figures = []
     F_figures = []
-    # code.interact(local=dict(globals(), **locals()))
     for kk in range(K):
         if visible_objects[kk]:
             if data_model['objects'][kk] != 'L_shape':

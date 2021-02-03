@@ -13,7 +13,7 @@ def main(main_folder):
     is_constrained = True
 
     # Define objects for the images (square, triangle, trapezoid, L_shape, pentagon), {list of str}
-    objects = ['square', 'triangle', 'square']
+    objects = ['square', 'triangle', 'square','trapezoid','L_shape','pentagon']
     # objects = ['plane'] + 2*['square']
 
     # Determine which objects are present in the image, avoiding blank images, {list of {0,1} elements}

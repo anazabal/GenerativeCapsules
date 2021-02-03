@@ -47,7 +47,7 @@ def r_mnk_initialization(data_model, choice):
 def main(main_folder):
 
     verbose = True
-    video = False
+    video = True
 
     #Create base objects and their presence or not in the image
     objects = ['square', 'triangle', 'square']
@@ -92,7 +92,7 @@ def main(main_folder):
     # lambda_0 = 3*[1,50] + [1,50] + [1,50]
 
     models = ['sinkhorn_model_annealing_stop']
-    lambda_0 = [100]
+    lambda_0 = [1000]
 
     inits = 3
     title_inits = ['r_mnk close to truth'] + 20 * ['r_mkn random']
@@ -153,7 +153,7 @@ def main(main_folder):
                               .format(ii,ss,ELBO,ELBO_terms[0],-ELBO_terms[1],-ELBO_terms[2],score))
 
                     #stopping criteria
-                    if VI_model.stop(ELBO, new_ELBO, hyper_params, params, data_model):
+                    if VI_model.stop(ELBO, new_ELBO, hyper_params, params, data_model, lambda_0[mm]):
                         break
                     else:
                         new_ELBO = ELBO
@@ -184,12 +184,12 @@ def main(main_folder):
 
             #Plot the evolution of the VBEM
             utils.save_figures(figures_dir, final_results, final_params, data_model)
-            #All restarts
-            utils.video_creation(figures_dir, np.array(full_results), full_params, data_model, title_inits[ii], 1000)
+            # #All restarts
+            # utils.video_creation(figures_dir, np.array(full_results), full_params, data_model, title_inits[ii], 1000)
 
             #Only the best
-            if video:
-                utils.video_creation(figures_dir, np.array(final_results), final_params, data_model, title_inits[ii], 100)
+            if video and not utils.is_correct(final_params, data_model):
+                utils.video_creation(figures_dir, np.array(final_results), final_params, data_model, title_inits[ii], 1000)
 
             # code.interact(local=dict(globals(), **locals()))
 

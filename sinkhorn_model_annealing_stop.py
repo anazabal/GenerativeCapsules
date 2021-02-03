@@ -1,10 +1,14 @@
 import numpy as np
 from scipy.special import logsumexp
 import code
+# code.interact(local=dict(globals(), **locals()))
 
 # Set the hyperparameters of the model (mu_0, Lambda_0) for Y and lambda_0
 def hyperparams_initialization(data_model, mu_0=np.zeros(4), Lambda_0=np.eye(4), lambda_0=10):
     # Prior for Z -> uniform
+    mean_x = data_model['X_m'].mean(0)
+    mu_0 = np.zeros(4)
+    mu_0[:2] = mean_x
     a_mnk = np.ones([data_model['N'], data_model['N']])/data_model['N']
     return dict({'lambda_0': lambda_0, 'Lambda_0': Lambda_0, 'mu_0': mu_0, 'a_mnk': a_mnk})
 
@@ -100,7 +104,7 @@ def update_r_mnk(hyper_params, data_model, mahal_term, trace_term):
 
     #Update log_rho for the points present in the data
     log_rho[:M] -= 0.5 * lambda_0 * (mahal_term + np.reshape(trace_term, [1, -1]))
-    log_r = sinkhorn_knopp(log_rho)
+    log_r = sinkhorn_knopp(log_rho, max_iters=2)
 
     return np.exp(log_r[:M, :]), np.exp(log_r)
 
@@ -176,8 +180,10 @@ def stop(ELBO, new_ELBO, hyper_params, params, data_model, lambda_0=10):
 
     M, N = data_model['M'], data_model['N']
     lambda_max = 1e4
+    tol = 1e-3
+    code.interact(local=dict(globals(), **locals()))
 
-    if np.abs(ELBO - new_ELBO) < 1e-3:
+    if np.abs(ELBO - new_ELBO) < tol:
         # if hyper_params['lambda_0'] < 2000:
         #     hyper_params['lambda_0'] *= 2
         #     return False
@@ -211,6 +217,7 @@ def stop(ELBO, new_ELBO, hyper_params, params, data_model, lambda_0=10):
             return False
         elif hyper_params['lambda_0'] < lambda_max:
             hyper_params['lambda_0'] *= 2
+            # hyper_params['lambda_0'] += 1
             return False
         elif not is_semi_permutation_matrix(params['r_mnk'][-1],1e-1):
             # code.interact(local=dict(globals(), **locals()))
