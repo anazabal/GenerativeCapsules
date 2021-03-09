@@ -1,27 +1,37 @@
-import code
 import numpy as np
 from scipy.special import digamma, gammaln, logsumexp
 
-def hyperparams_initialization(data_model, lambda_0=10):
+# Set the hyperparameters of the model (mu_0, Lambda_0) for Y and lambda_0
+def hyperparams_initialization(data_model, mu_0=np.zeros(4), Lambda_0=np.eye(4), lambda_0=10):
+    # Prior for Z -> uniform
+    mean_x = data_model['X_m'].mean(0)
+    mu_0 = np.zeros(4)
+    mu_0[:2] = mean_x
+    alpha_0 = np.ones(data_model['N'])
 
-    # x,y
-    _, dim_y = np.shape(data_model['F'][0][0])
-    Lambda_0 = np.eye(dim_y)
-    mu_0 = np.zeros(dim_y)
-    # mu_0 = np.array([0,0,1,0])
-    # p(Z) -> double stochastic prior
-    a_mnk = np.ones([data_model['N'], data_model['N']])/data_model['N']
+    return dict({'lambda_0': lambda_0,
+                 'Lambda_0': Lambda_0,
+                 'mu_0': mu_0,
+                 'alpha_0': alpha_0,
+                 })
 
-    return dict({'lambda_0': lambda_0, 'Lambda_0': Lambda_0, 'mu_0': mu_0, 'a_mnk': a_mnk})
+def params_initialization(r_mnk, data_model, hyper_params):
+    K = data_model['K']
+    return dict({'alpha_k': [K*[hyper_params['alpha_0']]],
+                 'Lambda_k': [K*[hyper_params['Lambda_0']]],
+                 'mu_k': [K*[hyper_params['mu_0']]],
+                 'r_mnk': [r_mnk],
+                 'lambda_0': [hyper_params['lambda_0']],
+                 })
 
-def params_initialization(r_mnk, hyper_params):
+# Assignment matrix initialization (random)
+def r_mnk_initialization(data_model):
+    r_mnk = np.random.rand(data_model['M'], data_model['N'])
+    return r_mnk / np.sum(r_mnk, 1).reshape(-1, 1)
 
-    return dict({'Lambda_k': [], 'mu_k': [], 'r_mnk': [r_mnk], 'r_mnk_complete': [], 'lambda_0': [hyper_params['lambda_0']]})
+def compute_alpha_k(params, hyper_params):
 
-
-# def compute_alpha_k(params, hyper_params):
-#
-#     return hyper_params['alpha_0'] + np.sum(params['r_mnk'][-1], 0)
+    return hyper_params['alpha_0'] + np.sum(params['r_mnk'][-1], 0)
 
 def compute_Lambda_k(params, hyper_params, data_model):
 
@@ -70,8 +80,7 @@ def compute_mahal_term(params, data_model):
 
     mahal_term = np.zeros([M, N])
     for mm in range(M):
-        for nn in range(N):
-            mahal_term[mm, nn] = np.sum((data_model['X_m'][mm] - recon_term[nn]) ** 2)
+        mahal_term[mm, :] = np.sum((data_model['X_m'][mm] - recon_term) ** 2, 1)
 
     return mahal_term
 
@@ -101,52 +110,29 @@ def sinkhorn_klopp(log_r):
 
     return log_r
 
-# def sinkhorn_klopp_reverse(log_r):
-#
-#     M, N = np.shape(log_r)
-#     sum_rows = logsumexp(log_r, axis=0)
-#     counter = 0
-#     while not (np.abs(np.exp(sum_rows) - 1) < 1e-3).all():
-#         log_r = log_r - logsumexp(log_r, axis=1).reshape(-1, 1)
-#         sum_rows = logsumexp(log_r, axis=0)
-#         log_r = log_r - sum_rows.reshape(1, -1)
-#         counter += 1
-#
-#     return log_r
-
 def compute_r_mnk(params, hyper_params, data_model, mahal_term, trace_term, normalize_rows=True):
 
-    # alpha_k = params['alpha_k'][-1]
+    alpha_k = params['alpha_k'][-1]
     lambda_0 = hyper_params['lambda_0']
-    a_mnk = hyper_params['a_mnk']
     M, N = data_model['M'], data_model['N']
 
-    # #E[log pi]
-    # E_log_pi = digamma(alpha_k) - digamma(np.sum(alpha_k))
+    #E[log pi]
+    E_log_pi = digamma(alpha_k) - digamma(np.sum(alpha_k))
 
-    #log_rho is log a_mnk for M = N
-    log_rho = np.log(a_mnk)
+    log_rho = -np.log(2 * np.pi) + np.log(lambda_0) + E_log_pi.reshape(1, -1) - 0.5 * lambda_0 * (
+        mahal_term + np.reshape(trace_term, [1, -1]))
 
-    #Update log_rho for the points present in the data
-    log_rho[:M] += -np.log(2 * np.pi) + np.log(lambda_0) - 0.5 * lambda_0 * (mahal_term + np.reshape(trace_term, [1, -1]))
-
-    # log_rho = -np.log(2 * np.pi) + np.log(lambda_0) + E_log_pi.reshape(1, -1) - 0.5 * lambda_0 * (
-    #     mahal_term + np.reshape(trace_term, [1, -1]))
-
-    log_r = sinkhorn_klopp(log_rho)
-    return np.exp(log_r[:M, :]), np.exp(log_r)
-
-    # if normalize_rows:
-    #     #Check if dummy variables are needed
-    #     if M < N:
-    #         dummies = create_dummies(M, N)
-    #         log_rho = np.concatenate([log_rho, dummies], 0)
-    #     log_r = sinkhorn_klopp(log_rho)
-    #     return np.exp(log_r[:M,:]) #Remove dummy rows
-    # else:
-    #     #Only make rows sum to 1
-    #     log_r = log_rho - logsumexp(log_rho, axis=1).reshape(-1, 1)
-    #     return np.exp(log_r)
+    if normalize_rows:
+        #Check if dummy variables are needed
+        if M < N:
+            dummies = create_dummies(M, N)
+            log_rho = np.concatenate([log_rho, dummies], 0)
+        log_r = sinkhorn_klopp(log_rho)
+        return np.exp(log_r[:M,:]) #Remove dummy rows
+    else:
+        #Only make rows sum to 1
+        log_r = log_rho - logsumexp(log_rho, axis=1).reshape(-1, 1)
+        return np.exp(log_r)
 
 def compute_E_log_p_x(params, hyper_params, data_model, mahal_term, trace_term):
 
@@ -171,24 +157,22 @@ def compute_KL_Y(params, hyper_params, data_model, Lambda_k_inv, muk_mu0_term):
 
     return dim_y / 2 * K + 0.5 * Lambda_part - 0.5 * muk_mu0_term - 0.5 * trace_part
 
-def compute_KL_Z(params, hyper_params):
+def compute_KL_Z(params):
 
-    a_mnk = hyper_params['a_mnk']
-    r_mnk_complete = params['r_mnk_complete'][-1]
-    # r_mnk, alpha_k = params['r_mnk'][-1], params['alpha_k'][-1]
+    r_mnk, alpha_k = params['r_mnk'][-1], params['alpha_k'][-1]
 
-    return np.sum(r_mnk_complete * (np.log(a_mnk) - np.log(r_mnk_complete + 1e-9)))
+    return np.sum(r_mnk * (digamma(alpha_k) - digamma(np.sum(alpha_k.reshape([1, -1]))) - np.log(r_mnk + 1e-9)))
 
-# def compute_KL_pi(params, hyper_params):
-#
-#     alpha_k = params['alpha_k'][-1]
-#     alpha_0 = hyper_params['alpha_0']
-#
-#     E_log_pi = digamma(alpha_k) - digamma(np.sum(alpha_k))
-#     log_beta_alpha_0 = np.sum(gammaln(alpha_0)) - gammaln(np.sum(alpha_0))
-#     log_beta_alpha_k = np.sum(gammaln(alpha_k)) - gammaln(np.sum(alpha_k))
-#
-#     return np.sum((alpha_0 - alpha_k) * E_log_pi) - log_beta_alpha_0 + log_beta_alpha_k
+def compute_KL_pi(params, hyper_params):
+
+    alpha_k = params['alpha_k'][-1]
+    alpha_0 = hyper_params['alpha_0']
+
+    E_log_pi = digamma(alpha_k) - digamma(np.sum(alpha_k))
+    log_beta_alpha_0 = np.sum(gammaln(alpha_0)) - gammaln(np.sum(alpha_0))
+    log_beta_alpha_k = np.sum(gammaln(alpha_k)) - gammaln(np.sum(alpha_k))
+
+    return np.sum((alpha_0 - alpha_k) * E_log_pi) - log_beta_alpha_0 + log_beta_alpha_k
 
 def lambda_MAP_estimation(params, data_model, mahal_term, trace_term):
 
@@ -201,10 +185,10 @@ def lambda_MAP_estimation(params, data_model, mahal_term, trace_term):
     return M/(1e-3+0.5*(mahal_part + trace_part))
 
 
-def params_update(data_model, params, hyper_params, normalize_rows=True):
+def params_update(data_model, params, hyper_params):
 
-    # # Update equations - alpha
-    # params['alpha_k'].append(compute_alpha_k(params, hyper_params))
+    # Update equations - alpha
+    params['alpha_k'].append(compute_alpha_k(params, hyper_params))
 
     # Update equations - Lambda_k
     params['Lambda_k'].append(compute_Lambda_k(params, hyper_params, data_model))
@@ -219,9 +203,7 @@ def params_update(data_model, params, hyper_params, normalize_rows=True):
     trace_term = compute_trace_term(Lambda_k_inv, data_model)
 
     # Update r_mnk
-    r_mnk, r_mnk_complete = compute_r_mnk(params, hyper_params, data_model, mahal_term, trace_term, normalize_rows)
-    params['r_mnk'].append(r_mnk)
-    params['r_mnk_complete'].append(r_mnk_complete)
+    params['r_mnk'].append(compute_r_mnk(params, hyper_params, data_model, mahal_term, trace_term, False))
 
     # Save current lambda
     params['lambda_0'].append(hyper_params['lambda_0'])
@@ -229,15 +211,15 @@ def params_update(data_model, params, hyper_params, normalize_rows=True):
     #Compute ELBO
     E_log_p_x = compute_E_log_p_x(params, hyper_params, data_model, mahal_term, trace_term)
     KL_y = compute_KL_Y(params, hyper_params, data_model, Lambda_k_inv, muk_mu0_term)
-    KL_z = compute_KL_Z(params, hyper_params)
-    KL_pi = 0
-    # KL_pi = compute_KL_pi(params, hyper_params)
+    KL_z = compute_KL_Z(params)
+    KL_pi = compute_KL_pi(params, hyper_params)
     score = np.sum(mahal_term * params['r_mnk'][-1])
 
     ELBO_terms = [E_log_p_x, KL_y, KL_z, KL_pi]
 
     return params, ELBO_terms, score
 
-def stop(ELBO, new_ELBO, hyper_params, params, data_model):
+def stop(ELBO_epoch, new_ELBO, hyper_params, params, data_model, lambda_0=10):
 
+    ELBO = ELBO_epoch[-1]
     return True if np.abs(ELBO - new_ELBO) < 1e-3 else False

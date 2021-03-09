@@ -1,6 +1,8 @@
 import code
 # code.interact(local=dict(globals(), **locals()))
 import numpy as np
+import os
+import pickle
 import data_creator
 from itertools import product
 from functools import reduce
@@ -58,7 +60,7 @@ def get_possible_objects(data_model, tol=1e-0):
     bases, F = get_bases(data_model)
 
     n_points = data_model['M']
-    list_points, list_x, cost_total = [], [], []
+    list_points, list_x, cost_total, x_est_total = [], [], [], []
     #Loop twice through all points, order is important
     for ii in range(n_points):
         for jj in range(n_points):
@@ -90,19 +92,21 @@ def get_possible_objects(data_model, tol=1e-0):
                         cost_total += [np.mean(sq_diffs[group,cols])]
                         list_points += [permutation]
                         list_x += [data_model['X_m'][permutation]]
+                        x_est_total += [obj]
 
-    return list_points, list_x, cost_total
+    return list_points, list_x, cost_total, x_est_total
 
 
 #Remove duplicate lists of points, which are permutations of each other
-def remove_duplicates(list_points, list_costs):
-    unique_list_points, unique_sets, unique_costs = [], [], []
+def remove_duplicates(list_points, list_costs, x_est_total):
+    unique_list_points, unique_sets, unique_costs, unique_x_est = [], [], [], []
     for kk, elem in enumerate(list_points):
         set_elem = set(elem)
         if set_elem not in unique_sets:
             unique_sets += [set_elem]
             unique_list_points += [elem]
             unique_costs += [list_costs[kk]]
+            unique_x_est += [x_est_total[kk]]
         else:
             index_duplicate = unique_sets.index(set_elem)
             #Get the set with lower sq_diff
@@ -110,18 +114,21 @@ def remove_duplicates(list_points, list_costs):
                 unique_sets[index_duplicate] = set_elem
                 unique_list_points[index_duplicate] = elem
                 unique_costs[index_duplicate] = list_costs[kk]
+                unique_x_est[index_duplicate] = x_est_total[kk]
 
-    return unique_list_points, unique_costs
+    return unique_list_points, unique_costs, unique_x_est
 
-def identify_unique_permutations(x, list_points, list_costs):
+def identify_unique_permutations(x, list_points, list_costs, list_x_est):
 
     solution = []
     costs = []
+    x_est = []
     not_removed = True
     removed_elements = []
     elements = set(range(np.shape(x)[0]))
     new_list_points = list_points.copy()
     new_list_costs = list_costs.copy()
+    new_list_x_est = list_x_est.copy()
 
     while not_removed:
         not_removed = False
@@ -134,21 +141,25 @@ def identify_unique_permutations(x, list_points, list_costs):
                 pattern = new_list_points[pos]
                 solution += [pattern]
                 costs += [new_list_costs[pos]]
+                x_est += [new_list_x_est[pos]]
                 removed_elements += pattern
                 # Remove element from the list
                 del new_list_points[pos]
                 del new_list_costs[pos]
+                del new_list_x_est[pos]
                 # Remove other sublists with elements already seen in the pattern
                 for rr in pattern:
                     rr_in_sublists = [rr in sublist for sublist in new_list_points]
                     new_list_points = [new_list_points[kk] for kk, elem in enumerate(rr_in_sublists) if not elem]
                     new_list_costs = [new_list_costs[kk] for kk, elem in enumerate(rr_in_sublists) if not elem]
+                    new_list_x_est = [new_list_x_est[kk] for kk, elem in enumerate(rr_in_sublists) if not elem]
                 # We've removed something, we might need to repeat the while
                 not_removed = True
             # Remove remaining lists with element mm
             elif mm in removed_elements:
                 new_list_points = [new_list_points[kk] for kk, elem in enumerate(mm_in_sublists) if not elem]
                 new_list_costs = [new_list_costs[kk] for kk, elem in enumerate(mm_in_sublists) if not elem]
+                new_list_x_est = [new_list_x_est[kk] for kk, elem in enumerate(mm_in_sublists) if not elem]
 
         # Update possible elements
         elements = elements - set(removed_elements)
@@ -156,29 +167,40 @@ def identify_unique_permutations(x, list_points, list_costs):
     # print('In function')
     # code.interact(local=dict(globals(), **locals()))
 
-    return solution, costs, new_list_points, new_list_costs, removed_elements,
+    return solution, costs, x_est, new_list_points, new_list_costs, new_list_x_est, removed_elements,
 
 # This function selects from the consistent point permutations, the ones that created the image
-def find_possible_solutions(x, list_points, list_costs):
+def find_possible_solutions(x, list_points, list_costs, x_est_total):
     # Remove duplicate lists of points, which are permutations of each other
-    unique_list_points, unique_costs = remove_duplicates(list_points, list_costs)
+    unique_list_points, unique_costs, unique_x_est = remove_duplicates(list_points, list_costs, x_est_total)
+    for aa, bb in zip(unique_list_points, unique_x_est):
+        if len(aa) != len(bb):
+            print('Duplicates')
+            code.interact(local=dict(globals(), **locals()))
 
     if not unique_list_points:
         print('Nothing found')
-        return False, []
+        return False, [], [], []
 
     # print('before function')
     # code.interact(local=dict(globals(), **locals()))
 
     #Identify permutations including a point not appearing anywhere else
-    solution, costs, unique_list_points, unique_costs, removed_elements = identify_unique_permutations(x, unique_list_points, unique_costs)
+    solution, costs, x_est, unique_list_points, unique_costs, unique_x_est, removed_elements \
+        = identify_unique_permutations(x, unique_list_points, unique_costs, unique_x_est)
+    for aa, bb in zip(unique_list_points, unique_x_est):
+        if len(aa) != len(bb):
+            print('permutations')
+            code.interact(local=dict(globals(), **locals()))
 
     # print('after function')
 
     #Sort remaining points by cost
     cheap_to_expensive = np.argsort(unique_costs)
+    # code.interact(local=dict(globals(), **locals()))
     costs_sorted = np.array(unique_costs)[cheap_to_expensive].tolist()
-    points_sorted = np.array(unique_list_points)[cheap_to_expensive].tolist()
+    points_sorted = np.array(unique_list_points,dtype=list)[cheap_to_expensive].tolist()
+    x_est_sorted = np.array(unique_x_est,dtype=list)[cheap_to_expensive].tolist()
 
     # print('other code')
     # code.interact(local=dict(globals(), **locals()))
@@ -203,14 +225,16 @@ def find_possible_solutions(x, list_points, list_costs):
         #Collect all solutions and costs, and select the solution with less costs
         if solution_indexes:
             finished = True
-            solutions = [solution + np.array(points_sorted)[ind].tolist() for ind in solution_indexes]
+            solutions = [solution + np.array(points_sorted,dtype=list)[ind].tolist() for ind in solution_indexes]
             costs = [sum(costs + np.array(costs_sorted)[ind].tolist()) for ind in solution_indexes]
+            x_ests = [x_est + np.array(x_est_sorted,dtype=list)[ind].tolist() for ind in solution_indexes]
             solution = solutions[np.argmin(costs)]
+            x_est = x_ests[np.argmin(costs)]
         else:
             finished = False
             print('Finding solutions failed')
 
-    return finished, [x[elem] for elem in solution]
+    return finished, [x[elem] for elem in solution], solution, x_est
 
 # # This function selects from the consistent point permutations, the ones that created the image
 # def find_possible_solutions(x, list_points, list_costs):
@@ -366,14 +390,43 @@ def find_unique_pattern(x, points_assigned, cost_total):
 
 
 def run(data_model):
-    tol = 1e-4
+    # tol = 1e-4
+    tol = 1e-1
     finished = False
     while not finished and tol <= 1:
         print(tol)
         #Get the list of objects consistent with the points in the image
-        list_points, list_x, list_costs = get_possible_objects(data_model, tol)
+        list_points, list_x, list_costs, x_est_total = get_possible_objects(data_model, tol)
+        # for aa, bb in zip(list_points, x_est_total):
+        #     if len(aa) != len(bb):
+        #         print('First function')
+        #         code.interact(local=dict(globals(), **locals()))
+
         #From all consistent shapes with the image, return the ones that created the image
-        finished, X_obj_est = find_possible_solutions(data_model['X_m'], list_points, list_costs)
+        finished, X_obj_est, solution, x_est = find_possible_solutions(data_model['X_m'], list_points, list_costs, x_est_total)
+        for aa, bb in zip(solution,x_est):
+            if len(aa) != len(bb):
+                print('Second function')
+                code.interact(local=dict(globals(), **locals()))
         tol *= 10
 
-    return X_obj_est
+    return X_obj_est, solution, x_est
+
+def save_results(figures_dir, data_model, X_obj_est, X_transformed, assignment):
+    # Create a directory if it doesn't exist
+    if not os.path.exists(figures_dir):
+        os.makedirs(figures_dir)
+
+    # Save data model
+    data_file = figures_dir + 'data_model.pkl'
+    with open(data_file, 'wb') as f:
+        pickle.dump(data_model, f, pickle.HIGHEST_PROTOCOL)
+    data_file = figures_dir + 'X_obj_est.pkl'
+    with open(data_file, 'wb') as f:
+        pickle.dump(X_obj_est, f, pickle.HIGHEST_PROTOCOL)
+    data_file = figures_dir + 'X_transformed.pkl'
+    with open(data_file, 'wb') as f:
+        pickle.dump(X_transformed, f, pickle.HIGHEST_PROTOCOL)
+    data_file = figures_dir + 'assignment.pkl'
+    with open(data_file, 'wb') as f:
+        pickle.dump(assignment, f, pickle.HIGHEST_PROTOCOL)
