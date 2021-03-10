@@ -11,7 +11,7 @@ import csv
 def main(main_folder, noise, n_images, noise_file=None):
 
     verbose = False
-    plot_figures = True
+    plot_figures = False
     video = False
 
     #Create base objects and their presence or not in the image
@@ -144,10 +144,10 @@ def main(main_folder, noise, n_images, noise_file=None):
 if __name__ == '__main__':
 
     # Run this several times
-    n_images = 50
+    n_images = 512
     # noise_levels = [0.01, 0.05, 0.1, 0.5]
-    noise_levels = [0]
+    noise_levels = [0.25]
     for noise in noise_levels:
         main_folder = 'Test_noise_025'
-        main(main_folder, noise, n_images)
-        # main(main_folder, noise, n_images, 'valid_report_vals_025.pkl')
+        # main(main_folder, noise, n_images)
+        main(main_folder, noise, n_images, 'valid_report_vals_025.pkl')
